@@ -1,0 +1,267 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Documents;
+using Lucene.Net.Index;
+using Lucene.Net.QueryParsers;
+using Lucene.Net.Search;
+using Lucene.Net.Store;
+using Version = Lucene.Net.Util.Version;
+
+namespace FacetedSearchMvc.Models
+{
+    public class LuceneSearch
+    {
+        RAMDirectory directory = new RAMDirectory();
+
+        public LuceneSearch()
+        {
+            Initialize();
+        }
+
+        public IList<Filter> GetFilter(string[] names, string[] cities, string[] streets, string[] houseNos)
+        {
+            var filters = CreateFilter(names, cities, streets, houseNos);
+
+            var reader = IndexReader.Open(directory, true);
+
+            foreach (var filter in filters)
+            {
+                SimpleFacetedSearch search = new SimpleFacetedSearch(reader, new [] { filter.Name });
+
+                var query = GetQuery(filters);
+                var hits = search.Search(query);
+                foreach (var facet in hits.HitsPerFacet)
+                {
+                    var hitCount = facet.HitCount;
+
+                    var item = filter.Items.FirstOrDefault(i => string.Equals(i.Id, facet.Name[0], StringComparison.InvariantCultureIgnoreCase));
+                    if (item == null)
+                    {
+                        item = new FilterItem
+                        {
+                            Id = facet.Name[0],
+                            Name = $"{facet.Name[0]} ({hitCount})",
+                            //Checked = filter.CheckedValues.Contains(facet.Name[0])
+                        };
+                        filter.Items.Add(item);
+                    }
+                    else
+                    {
+                        item.Name = $"{facet.Name[0]} ({hitCount})";
+                        item.Checked = true;
+                    }
+                }
+                filter.Items.Sort((s1, s2) => string.Compare(s1.Name, s2.Name, StringComparison.Ordinal));
+            }
+
+            return filters;
+        }
+
+        private static List<Filter> CreateFilter(string[] names, string[] cities, string[] streets, string[] houseNos)
+        {
+            var nameFilter = new Filter {Name = "Name", Items = new List<FilterItem>(), CheckedValues = CreateSet(names)};
+            nameFilter.Add(names);
+
+            var cityFilter = new Filter {Name = "City", Items = new List<FilterItem>(), CheckedValues = CreateSet(cities)};
+            cityFilter.Add(cities);
+
+            var streetFilter = new Filter {Name = "Street", Items = new List<FilterItem>(), CheckedValues = CreateSet(streets)};
+            streetFilter.Add(streets);
+
+            var houseNoFilter = new Filter
+            {
+                Name = "HouseNo",
+                Items = new List<FilterItem>(),
+                CheckedValues = CreateSet(houseNos)
+            };
+            houseNoFilter.Add(houseNos);
+
+            var filters = new List<Filter> {nameFilter, cityFilter, streetFilter, houseNoFilter};
+            return filters;
+        }
+
+        private static HashSet<string> CreateSet(string[] values)
+        {
+            var set = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+            if (values != null)
+            {
+                set.UnionWith(values);
+            }
+            return set;
+        }
+
+        public IList<Row> GetRows(string[] names, string[] cities, string[] streets, string[] houseNos)
+        {
+            var rows = new List<Row>();
+
+            var reader = IndexReader.Open(directory, true);
+            var filters = CreateFilter(names, cities, streets, houseNos);
+            var query = GetQuery(filters);
+
+            SimpleFacetedSearch search = new SimpleFacetedSearch(reader, new string[] { });
+            var hits = search.Search(query);
+
+            foreach (var facet in hits.HitsPerFacet)
+            {
+                foreach (Document doc in facet.Documents)
+                {
+                    var id = doc.GetField("Id").StringValue;
+                    var name = doc.GetField("Name").StringValue;
+                    var city = doc.GetField("City").StringValue;
+                    var street = doc.GetField("Street").StringValue;
+                    var houseNo = doc.GetField("HouseNo").StringValue;
+
+                    var row = new Row
+                    {
+                        Values = new List<string> {id, name, city, street, houseNo}
+                    };
+
+                    rows.Add(row);
+                }
+            }
+
+            return rows;
+        }
+
+        private Query GetQuery(List<Filter> filters)
+        {
+            bool hasAnyFilter = false;
+            foreach (var filter in filters)
+            {
+                if (filter.Items.Count > 0)
+                {
+                    hasAnyFilter = true;
+                    break;
+                }
+            }
+
+            if (!hasAnyFilter)
+                return new MatchAllDocsQuery();
+
+            var queryBuilder = new StringBuilder();
+            foreach (var filter in filters)
+            {
+                if (filter.Items.Count > 0)
+                {
+                    var items = filter.Items.Select(item => item.Id);
+                    AddQuery(queryBuilder, filter.Name, items);
+                }
+            }
+
+            if (queryBuilder.Length == 0)
+                return new MatchAllDocsQuery();
+
+            var parser = new QueryParser(Version.LUCENE_30, "Id", new StandardAnalyzer(Version.LUCENE_30))
+            {
+                AllowLeadingWildcard = true
+            };
+
+            return parser.Parse(queryBuilder.ToString());
+        }
+
+/*
+        private static Query GetQuery(string[] names, string[] cities, string[] streets, string[] houseNos)
+        {
+            Query query;
+            if ((names != null && names.Length > 0) ||
+                (cities != null && cities.Length > 0) ||
+                (streets != null && streets.Length > 0) ||
+                (houseNos != null && houseNos.Length > 0))
+            {
+                var queryBuilder = new StringBuilder();
+                AddQuery(queryBuilder, "Name", names);
+                AddQuery(queryBuilder, "City", cities);
+                AddQuery(queryBuilder, "Street", streets);
+                AddQuery(queryBuilder, "HouseNo", houseNos);
+
+                var parser = new QueryParser(Version.LUCENE_30, "Id", new StandardAnalyzer(Version.LUCENE_30))
+                {
+                    AllowLeadingWildcard = true
+                };
+
+                var q = queryBuilder.ToString();
+                query = parser.Parse(q);
+            }
+            else
+            {
+                query = new MatchAllDocsQuery();
+            }
+            return query;
+        }
+*/
+
+        private static void AddQuery(StringBuilder queryBuilder, string fieldName, IEnumerable<string> names)
+        {
+            if (names == null)
+                return;
+
+            var subQueryBuilder = new StringBuilder();
+
+            foreach (var value in names)
+            {
+                if (subQueryBuilder.Length > 0)
+                {
+                    subQueryBuilder.Append(" OR ");
+                }
+                subQueryBuilder.Append($"{fieldName}:{value}");
+            }
+
+            if (subQueryBuilder.Length > 0)
+            {
+                if (queryBuilder.Length > 0)
+                {
+                    queryBuilder.Append(" AND ");
+                }
+
+                queryBuilder.Append($"({subQueryBuilder})");
+            }
+        }
+
+        private void Initialize()
+        {
+            IndexWriter writer = new IndexWriter(
+                directory,
+                new StandardAnalyzer(Version.LUCENE_30),
+                true,
+                IndexWriter.MaxFieldLength.UNLIMITED);
+
+            writer.AddDocument(CreateDoc("1", "Romas", "Kaunas", "Savanorių", "1"));
+            writer.AddDocument(CreateDoc("2", "Simona", "Vilnius", "Ukmergės", "2"));
+            writer.AddDocument(CreateDoc("3", "Romas", "Panevėžys", "Smėlynės", "1"));
+            writer.AddDocument(CreateDoc("4", "Simona", "Kaunas", "Savanorių", "2"));
+            writer.AddDocument(CreateDoc("5", "Romas", "Panevėžys", "Smėlynės", "3"));
+            writer.AddDocument(CreateDoc("6", "Rokas", "Kaunas", "Savanorių", "4"));
+            writer.AddDocument(CreateDoc("7", "Romas", "Kaunas", "Taikos", "3"));
+            writer.AddDocument(CreateDoc("8", "Simona", "Vilnius", "Taikos", "5"));
+            writer.AddDocument(CreateDoc("9", "Romas", "Vilnius", "Ukmergės", "5"));
+            writer.AddDocument(CreateDoc("10", "Simona", "Kaunas", "Taikos", "4"));
+            writer.AddDocument(CreateDoc("11", "Romas", "Panevėžys", "Taikos", "1"));
+            writer.AddDocument(CreateDoc("12", "Romas", "Kaunas", "Savanorių", "2"));
+            writer.AddDocument(CreateDoc("13", "Simona", "Vilnius", "Savanorių", "3"));
+            writer.AddDocument(CreateDoc("14", "Remigijus", "Panevėžys", "Taikos", "4"));
+            writer.AddDocument(CreateDoc("15", "Romas", "Kaunas", "Taikos", "4"));
+            writer.AddDocument(CreateDoc("16", "Simona", "Kaunas", "Savanorių", "2"));
+            writer.AddDocument(CreateDoc("17", "Romas", "Vilnius", "Savanorių", "1"));
+            writer.AddDocument(CreateDoc("18", "Rokas", "Klaipėda", "Pramonės", "3"));
+            writer.AddDocument(CreateDoc("19", "Asta", "Klaipėda", "Vilniaus", "5"));
+            writer.AddDocument(CreateDoc("20", "Romas", "Kaunas", "Savanorių", "1"));
+
+            writer.Dispose(true);
+        }
+
+        private static Document CreateDoc(string id, string name, string city, string street, string houseNo)
+        {
+            var doc = new Document();
+            doc.Add(new Field("Id", id, Field.Store.YES, Field.Index.ANALYZED));
+            doc.Add(new Field("Name", name, Field.Store.YES, Field.Index.ANALYZED));
+            doc.Add(new Field("City", city, Field.Store.YES, Field.Index.ANALYZED));
+            doc.Add(new Field("Street", street, Field.Store.YES, Field.Index.ANALYZED));
+            doc.Add(new Field("HouseNo", houseNo, Field.Store.YES, Field.Index.ANALYZED));
+            return doc;
+        }
+
+    }
+}

@@ -1,0 +1,24 @@
+﻿@{
+    ViewBag.Title = "Convert jira tasks to printable cards";
+}
+
+<br/>
+
+<h3>Convert jira tasks to printable cards</h3>
+<p class="text-info">
+    Upload your Jira export file (XML) on the form below and click on "Convert" to get your Story cards
+</p>
+
+<form action="" method="post" enctype="multipart/form-data" class="form-horizontal" role="form">
+    @Html.AntiForgeryToken()
+    <input type="file" accept=".xml" name="file" id="file"/>
+    <br/>
+    <input type="submit" value="Convert"/>
+</form>
+
+<br/>
+
+<h3>How to print</h3>
+<p class="text-info">
+    Index cards are made for a full A4 page format. You can setup your printer in landscape and ask to print 2, 4, 8, 16 stories per page.
+</p>

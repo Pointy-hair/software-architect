@@ -1,0 +1,48 @@
+﻿@model software_architect.Models.LuceneViewModel
+
+@{
+    ViewBag.Title = "Contact";
+}
+<h2>@ViewBag.Title.</h2>
+<h3>@ViewBag.Message</h3>
+
+
+<div class="col-md-3">
+    <form action="~/Lucene/Index">
+        @foreach (var filter in Model.Filter)
+        {
+            <div class="row">@filter.Name</div>
+
+            foreach (var item in filter.Items)
+            {
+                if (item.Checked)
+                {
+                    <label><input type="checkbox" value="@item.Id" name="@filter.Name" checked>@item.Name</label>
+                }
+                else
+                {
+                    <label><input type="checkbox" value="@item.Id" name="@filter.Name">@item.Name</label>
+                }
+                <br />
+            }
+
+            <br />
+        }
+
+        <input type="submit" />
+    </form>
+</div>
+
+<div class="col-md-9 container">
+    <table>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                @foreach (var val in row.Values)
+                {
+                    <td style="width: 150px">@val</td>
+                }
+            </tr>
+        }
+    </table>
+</div>
