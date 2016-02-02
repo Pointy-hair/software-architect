@@ -1,25 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Web;
+﻿using System.Collections.Generic;
 using System.Web.Mvc;
 using software_architect.Models;
-using software_architect.Search;
+using software_architect.Search.Services;
+using Filter = software_architect.Search.Filter;
 
 namespace software_architect.Controllers
 {
     public class LuceneController : Controller
     {
-        private static readonly LuceneSearch searcher = new LuceneSearch();
+        private static readonly SearchService SearchService = new SearchService();
 
         public ActionResult Index(string[] name, string[] city, string[] street, string[] houseNo)
         {
-            var request = this.Request;
+            IList<Filter> filters = new List<Filter>
+            {
+                CreateFilter("Name", name),
+                CreateFilter("City", city),
+                CreateFilter("Street", street),
+                CreateFilter("HouseNo", houseNo),
+            };
 
-            var model = new LuceneViewModel();
-            model.Filter = searcher.GetFilter(name, city, street, houseNo);
-            model.Rows = searcher.GetRows(name, city, street, houseNo);
+            var model = new LuceneViewModel
+            {
+                Filter = SearchService.GetFilters(filters),
+                Rows = SearchService.Search(filters)
+            };
+
             return View(model);
+        }
+
+        private static Filter CreateFilter(string fieldName, string[] values)
+        {
+            var list = new List<string>();
+            if (values != null)
+                list.AddRange(values);
+            return new Filter {FieldName = fieldName, Values = list};
         }
     }
 }

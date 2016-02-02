@@ -5,7 +5,7 @@ namespace software_architect.Models
 {
     public class LuceneViewModel
     {
-        public IList<Filter> Filter { get; set; }
-        public IList<Row> Rows { get; set; }
+        public IList<SearchFilter> Filter { get; set; }
+        public IList<SearchDocument> Rows { get; set; }
     }
 }
