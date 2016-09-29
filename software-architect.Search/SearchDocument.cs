@@ -6,6 +6,7 @@ namespace software_architect.Search
 {
     public class SearchDocument
     {
+        public string Id { get; set; }
         public IList<SearchDocumentField> Fields { get; set; }
 
         public string GetStringValue(string fieldName, string defaultValue = null)

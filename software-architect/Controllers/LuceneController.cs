@@ -14,10 +14,10 @@ namespace software_architect.Controllers
         {
             IList<Filter> filters = new List<Filter>
             {
-                CreateFilter("Name", name),
-                CreateFilter("City", city),
-                CreateFilter("Street", street),
-                CreateFilter("HouseNo", houseNo),
+                CreateFilter("name", name),
+                CreateFilter("city", city),
+                CreateFilter("street", street),
+                CreateFilter("houseNo", houseNo),
             };
 
             var model = new LuceneViewModel

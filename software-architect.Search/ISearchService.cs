@@ -4,8 +4,8 @@ namespace software_architect.Search
 {
     public interface ISearchService
     {
-        void Save(SearchDocument doc);
-        IList<SearchDocument> Search(IList<Filter> searchFilters, IList<SearchSortField> sortFields);
+        void Save<T>(T doc) where T : class;
+        IList<SearchDocument> Search<T>(IList<Filter> searchFilters, IList<SearchSortField> sortFields) where T : class;
         IList<SearchFilter> GetFilter(IList<Filter> searchFilters);
     }
 }
