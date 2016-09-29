@@ -81,17 +81,9 @@ namespace software_architect.Search.Services.Lucene
 
             var searchRequest = new SearchRequest<DeveloperModel>
             {
-                Query = new BoolQuery
-                {
-                    Filter = new List<QueryContainer>
-                    {
-                        new TermQuery
-                        {
-                            Field = "houseNo",
-                            Value = "director"
-                        }
-                    }
-                },
+                Query = new BoolQuery { Filter = CreateFilter(searchFilters) },
+                Size = 100,
+                From = 0,
                 Aggregations = new AggregationDictionary(new Dictionary<string, AggregationContainer>
                 {
                     {
@@ -103,13 +95,13 @@ namespace software_architect.Search.Services.Lucene
                                 {
                                     "name", new AggregationContainer
                                     {
-                                        Filters = new FiltersAggregation("filter")
+                                        Filter = new FilterAggregation("name_filter")
                                         {
-                                            Filters = new Union<INamedFiltersContainer, List<QueryContainer>>(CreateFilter(searchFilters, "name"))
+                                            Filter = new BoolQuery {Filter = CreateFilter(searchFilters, "name")}
                                         },
                                         Aggregations = new AggregationDictionary(new Dictionary<string, AggregationContainer>
                                         {
-                                            { "filtered_names", new AggregationContainer
+                                            { "name_count", new AggregationContainer
                                             {
                                                 Terms = new TermsAggregation("terms")
                                                 {
@@ -122,13 +114,13 @@ namespace software_architect.Search.Services.Lucene
                                 {
                                     "city", new AggregationContainer
                                     {
-                                        Filters = new FiltersAggregation("filter")
+                                        Filter = new FilterAggregation("city_filter")
                                         {
-                                            Filters = new Union<INamedFiltersContainer, List<QueryContainer>>(CreateFilter(searchFilters, "city"))
+                                            Filter = new BoolQuery {Filter = CreateFilter(searchFilters, "city")}
                                         },
                                         Aggregations = new AggregationDictionary(new Dictionary<string, AggregationContainer>
                                         {
-                                            { "filtered_city", new AggregationContainer
+                                            { "city_count", new AggregationContainer
                                             {
                                                 Terms = new TermsAggregation("terms")
                                                 {
@@ -141,13 +133,13 @@ namespace software_architect.Search.Services.Lucene
                                 {
                                     "street", new AggregationContainer
                                     {
-                                        Filters = new FiltersAggregation("filter")
+                                        Filter = new FilterAggregation("street_filter")
                                         {
-                                            Filters = new Union<INamedFiltersContainer, List<QueryContainer>>(CreateFilter(searchFilters, "street"))
+                                            Filter = new BoolQuery {Filter = CreateFilter(searchFilters, "street")}
                                         },
                                         Aggregations = new AggregationDictionary(new Dictionary<string, AggregationContainer>
                                         {
-                                            { "filtered_street", new AggregationContainer
+                                            { "street_count", new AggregationContainer
                                             {
                                                 Terms = new TermsAggregation("terms")
                                                 {
@@ -160,13 +152,13 @@ namespace software_architect.Search.Services.Lucene
                                 {
                                     "houseNo", new AggregationContainer
                                     {
-                                        Filters = new FiltersAggregation("filter")
+                                        Filter = new FilterAggregation("houseNo_filter")
                                         {
-                                            Filters = new Union<INamedFiltersContainer, List<QueryContainer>>(CreateFilter(searchFilters, "houseNo"))
+                                            Filter = new BoolQuery {Filter = CreateFilter(searchFilters, "name")}
                                         },
                                         Aggregations = new AggregationDictionary(new Dictionary<string, AggregationContainer>
                                         {
-                                            { "filtered_houseNo", new AggregationContainer
+                                            { "houseNo_count", new AggregationContainer
                                             {
                                                 Terms = new TermsAggregation("terms")
                                                 {
@@ -210,33 +202,31 @@ namespace software_architect.Search.Services.Lucene
 
                     var searchFilter = searchFilters.FirstOrDefault(f => f.FieldName == fieldName);
 
-
-                    var agg = (BucketAggregate) category.Value;
-                    foreach (var values in agg.Items)
+                    var agg = (SingleBucketAggregate) category.Value;
+                    foreach (var values in agg.Aggregations)
                     {
-                        var valueBucket = (FiltersBucketItem)values;
-                        foreach (var item in valueBucket.Aggregations)
+                        var bucket = (BucketAggregate) values.Value;
+                        foreach (var bucketItem in bucket.Items)
                         {
-                            var bucket = (BucketAggregate) item.Value;
-                            foreach (var bucketItem in bucket.Items)
+                            var facetBucket = bucketItem as KeyedBucket;
+                            if (facetBucket != null)
                             {
-                                var facetBucket = bucketItem as KeyedBucket;
-                                if (facetBucket != null)
-                                {
-                                    var isQueried = searchFilter?.Values.Any(s => string.Equals(s, facetBucket.Key, StringComparison.InvariantCultureIgnoreCase)) ?? false;
+                                var isQueried =
+                                    searchFilter?.Values.Any(
+                                        s =>
+                                            string.Equals(s, facetBucket.Key,
+                                                StringComparison.InvariantCultureIgnoreCase)) ?? false;
 
-                                    items.Add(new SearchFilterItem
-                                    {
-                                        Value = facetBucket.Key,
-                                        Label = facetBucket.Key,
-                                        Hits = (int)facetBucket.DocCount.GetValueOrDefault(),
-                                        IsQueried = isQueried
-                                    });
-                                }
+                                items.Add(new SearchFilterItem
+                                {
+                                    Value = facetBucket.Key,
+                                    Label = facetBucket.Key,
+                                    Hits = (int) facetBucket.DocCount.GetValueOrDefault(),
+                                    IsQueried = isQueried
+                                });
                             }
                         }
                     }
-
                 }
             }
 
@@ -249,10 +239,8 @@ namespace software_architect.Search.Services.Lucene
 
             foreach (var searchFilter in searchFilters)
             {
-                if (exceptFieldName != null && exceptFieldName == searchFilter.FieldName)
-                    continue;
-
-                if (searchFilter.Values != null && searchFilter.Values.Count > 0)
+                if ((exceptFieldName == null || exceptFieldName != searchFilter.FieldName) &&
+                    searchFilter.Values != null && searchFilter.Values.Count > 0)
                 {
                     filter.Add(new TermsQuery
                     {
